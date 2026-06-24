@@ -65,9 +65,10 @@ A hardened, disposable Docker sandbox for Python/React development with the
      "Dev Containers: Reopen in Container" (uses `.devcontainer/devcontainer.json`).
    - **Shell**: `docker compose exec sandbox bash`
 
-5. Log in to Claude Code once inside the container:
+5. Log in to Claude Code once inside the container (use a real interactive terminal, e.g.
+   the VSCode integrated terminal — this won't work piped through a non-interactive shell):
    ```sh
-   claude login
+   claude setup-token
    ```
    This persists in the `claude-config` named volume, so you won't need to log in again
    after `docker compose restart` or rebuilding the image.
@@ -76,6 +77,20 @@ A hardened, disposable Docker sandbox for Python/React development with the
 
 - Python deps: `uv add <package>`, `uv sync`, `uv run <command>`.
 - Node/React deps: `pnpm add <package>`, `pnpm install`, `pnpm run <script>`.
+
+## Troubleshooting
+
+### `claude setup-token` / `/login` hangs or doesn't persist
+
+- `claude setup-token` needs a real interactive TTY (it renders prompts in raw mode) — run
+  it directly in a terminal you control (VSCode integrated terminal, or `docker compose
+  exec -it sandbox bash`), not piped or redirected.
+- If login appears to succeed but a subsequent command says "Not logged in" again, the
+  `claude-config` volume's ownership is likely wrong (Docker creates new named volumes as
+  `root:root` unless the image already has that directory pre-created and owned correctly —
+  this `Dockerfile` already handles that, but if you hit it: `docker compose down`, `docker
+  volume rm docker-llm_claude-config`, then `docker compose up -d --build` to let it
+  re-initialize with correct ownership).
 
 See [AGENT.md](AGENT.md) for the rules Claude Code itself follows inside this sandbox.
 

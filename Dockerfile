@@ -43,6 +43,21 @@ ENV PATH="${HOME}/.local/bin:${PATH}"
 # uv, pinned version, installed for the non-root user.
 RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh
 
+# Pre-create ~/.claude, owned by vscode, *before* it's used as a volume mount
+# point. Docker only initializes a brand-new named volume's ownership/contents
+# from whatever already exists at that path in the image; without this, Docker
+# would create the mount point itself as root:root, silently breaking
+# `claude login` for the non-root vscode user (no need to relax cap_drop/run
+# as root to fix this).
+RUN mkdir -p "${HOME}/.claude"
+
+# AGENT.md (sandbox rules for Claude Code itself) goes to a path outside the
+# ~/.claude volume mount, since anything copied directly into ~/.claude here
+# would only land in a brand-new volume, not one that already exists. The
+# entrypoint installs it into ~/.claude/CLAUDE.md (Claude's global memory) on
+# every start if not already present there.
+COPY --chown=vscode:vscode AGENT.md /opt/sandbox/AGENT.md
+
 WORKDIR /workspace
 
 COPY --chmod=755 scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
