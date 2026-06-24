@@ -1,0 +1,26 @@
+services:
+  sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: docker-llm-sandbox:local
+    # gVisor: install with scripts/setup-gvisor.sh on the host, then uncomment below.
+    # runtime: runsc
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    stdin_open: true
+    tty: true
+    env_file:
+      - .env
+    volumes:
+      # Host source code, bind-mounted so it persists outside the container.
+      - ${SOURCE_DIR:-./workspace}:/workspace
+      # Claude Code's own login/session state, persisted across rebuilds.
+      - claude-config:/home/vscode/.claude
+    working_dir: /workspace
+
+volumes:
+  claude-config:
