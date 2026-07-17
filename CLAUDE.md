@@ -36,7 +36,7 @@ Startup flow: `docker/entrypoint.sh` runs on every container start. It copies `/
 Security layers (don't loosen one to "fix" a problem another layer causes):
 - Non-root `vscode` user, with passwordless sudo explicitly removed in the Dockerfile
 - `cap_drop: ALL`, `no-new-privileges`, `pids_limit: 256` in docker-compose.yml
-- Read-only rootfs; only writable paths are `/workspace` (bind), `~/.claude` (volume), and tmpfs `/tmp` + `/home/vscode`. HOME is wiped every restart; `~/.local/bin` is last on PATH so sandbox code can't shadow system binaries
+- Read-only rootfs; only writable paths are `/workspace` (bind), `~/.claude` (volume), and tmpfs `/tmp` + `/home/vscode`. HOME is wiped every restart and mounted `exec` (vscode-server needs it); `/tmp` is deliberately `noexec`. `~/.local/bin` is last on PATH so sandbox code can't shadow system binaries
 - gVisor (`runsc`) is the mandatory runtime — hardcoded in compose, no opt-out; host must run `scripts/setup-gvisor.sh` once or the sandbox won't start
 - Resource caps: `cpus`/`mem_limit` (overridable via `SANDBOX_CPUS`/`SANDBOX_MEM_LIMIT` in `.env`), tmpfs-bounded `/tmp`
 - Network egress: sandbox sits on an `internal: true` network with no route out; its only path is the `proxy` service (Squid) enforcing the domain allowlist in `proxy/allowlist.txt`. The proxy env vars in compose are convenience — the internal network is the actual enforcement, so never attach `sandbox` to `egress_net`. To allow a new domain: edit `proxy/allowlist.txt`, then `docker compose restart proxy`.

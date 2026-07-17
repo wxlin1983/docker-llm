@@ -147,7 +147,8 @@ docker-compose.yml, .env(.example)   runtime wiring and secrets, host side only
   restores the image's dotfiles, Claude's login state lives in the `claude-config`
   volume (`~/.claude.json` is symlinked into it), and vscode-server just re-downloads
   after a container recreate. Anything that must persist belongs in `/workspace`, the
-  `Dockerfile`, or `~/.claude`.
+  `Dockerfile`, or `~/.claude`. HOME is mounted `exec` (vscode-server and user tools
+  must run from it) while `/tmp` stays `noexec` by design.
 - Never attach the `sandbox` service to `egress_net` (or any non-internal network);
   the internal-only network is what makes the egress allowlist enforceable rather
   than advisory.

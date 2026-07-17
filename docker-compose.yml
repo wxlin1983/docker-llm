@@ -26,8 +26,11 @@ services:
     mem_limit: ${SANDBOX_MEM_LIMIT:-6g}
     memswap_limit: ${SANDBOX_MEM_LIMIT:-6g}
     tmpfs:
+      # /tmp keeps Docker's default noexec deliberately: nothing in the dev
+      # workflow executes from /tmp, and it shuts down download-and-run there.
       - /tmp:size=1g,mode=1777
-      - /home/vscode:size=2g,uid=1000,gid=1000,mode=0755
+      # HOME needs exec: vscode-server and user-level tools run from here.
+      - /home/vscode:exec,size=2g,uid=1000,gid=1000,mode=0755
     stdin_open: true
     tty: true
     env_file:
