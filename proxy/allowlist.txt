@@ -1,0 +1,19 @@
+# Domains the sandbox may reach, one per line. A leading dot matches the
+# domain and all subdomains. Keep this list minimal: every entry is a
+# potential exfiltration target as well as a download source.
+# After editing, apply with: docker compose restart proxy
+
+# Claude Code: API, telemetry (statsig.anthropic.com), OAuth/setup-token flow
+.anthropic.com
+.claude.ai
+
+# GitHub: git push/pull (PAT auth), raw files, release assets
+.github.com
+.githubusercontent.com
+
+# Node/pnpm registry
+registry.npmjs.org
+
+# Python/uv: package index + wheel downloads
+pypi.org
+files.pythonhosted.org

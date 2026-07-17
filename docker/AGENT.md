@@ -33,6 +33,16 @@ rules of this environment so you don't fight its design.
   under `/workspace` that might get committed. The PAT lives only in the host's `.env`
   file and is injected at runtime — keep it that way.
 
+## Network
+
+- This container has **no direct route to the internet**. All outbound traffic goes
+  through an egress proxy (already configured via `HTTP_PROXY`/`HTTPS_PROXY`) that only
+  allows an explicit domain allowlist: Anthropic/Claude, GitHub, npm registry, PyPI.
+- If a legitimate task needs a domain that's blocked (proxy returns 403), tell the user
+  to add it to `proxy/allowlist.txt` on the host and run `docker compose restart proxy`.
+  Do not attempt to tunnel, use alternate ports/mirrors, or otherwise route around the
+  proxy — blocked-by-default is the intended design, not a bug.
+
 ## Security model
 
 - This container is intentionally locked down: no Linux capabilities (`cap_drop: ALL`),

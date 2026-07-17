@@ -13,16 +13,63 @@ services:
     security_opt:
       - no-new-privileges:true
     pids_limit: 256
+    # Resource caps so a runaway/hostile process can't take down the host.
+    # Override in .env; disk on the /workspace bind mount is NOT capped (needs
+    # host filesystem quota support), but /tmp is bounded by the tmpfs below.
+    cpus: ${SANDBOX_CPUS:-3}
+    mem_limit: ${SANDBOX_MEM_LIMIT:-6g}
+    memswap_limit: ${SANDBOX_MEM_LIMIT:-6g}
+    tmpfs:
+      - /tmp:size=1g,mode=1777
     stdin_open: true
     tty: true
     env_file:
       - .env
+    # All egress goes through the allowlisting proxy. This is enforced by the
+    # internal-only network below (no route out), not just by these variables.
+    environment:
+      HTTP_PROXY: http://proxy:3128
+      HTTPS_PROXY: http://proxy:3128
+      http_proxy: http://proxy:3128
+      https_proxy: http://proxy:3128
+      NO_PROXY: localhost,127.0.0.1
+      no_proxy: localhost,127.0.0.1
+    networks:
+      - sandbox_net
     volumes:
       # Host source code, bind-mounted so it persists outside the container.
       - ${SOURCE_DIR:-./workspace}:/workspace
       # Claude Code's own login/session state, persisted across rebuilds.
       - claude-config:/home/vscode/.claude
     working_dir: /workspace
+    depends_on:
+      - proxy
+
+  # Egress gatekeeper: the only container with a route to the outside. Enforces
+  # the domain allowlist in proxy/allowlist.txt. Audit trail of every outbound
+  # attempt: docker compose exec proxy tail -f /var/log/squid/access.log
+  proxy:
+    image: ubuntu/squid:6.13-25.04_edge
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    cpus: 0.5
+    mem_limit: 256m
+    volumes:
+      - ./proxy/squid.conf:/etc/squid/squid.conf:ro
+      - ./proxy/allowlist.txt:/etc/squid/allowlist.txt:ro
+    networks:
+      - sandbox_net
+      - egress_net
+    restart: unless-stopped
+
+networks:
+  # internal: true -> no gateway/NAT. The sandbox's ONLY path anywhere is the
+  # proxy service, which straddles both networks. Do not attach sandbox to
+  # egress_net or add other bridges here.
+  sandbox_net:
+    internal: true
+  egress_net:
 
 volumes:
   claude-config:

@@ -8,7 +8,7 @@ A hardened, disposable Docker sandbox that runs the Claude Code CLI for Python/R
 
 Note the two distinct agent files: this `CLAUDE.md` guides Claude Code working **on this repo** (host side); `docker/AGENT.md` is the rules file installed **inside the sandbox container** as the in-container Claude's global memory (`~/.claude/CLAUDE.md`). Changes to sandbox behavior rules go in `docker/AGENT.md`, not here.
 
-Layout rule: `docker/` holds everything that enters the image (Dockerfile, entrypoint.sh, AGENT.md) and is the compose build context; `scripts/` holds host-side helpers that never enter the image. Keep new files on the correct side of that line.
+Layout rule: `docker/` holds everything that enters the image (Dockerfile, entrypoint.sh, AGENT.md) and is the compose build context; `scripts/` holds host-side helpers and `proxy/` the egress-proxy config — both host-side, never entering the image. Keep new files on the correct side of that line.
 
 ## Commands
 
@@ -36,8 +36,12 @@ Startup flow: `docker/entrypoint.sh` runs on every container start. It copies `/
 Security layers (don't loosen one to "fix" a problem another layer causes):
 - Non-root `vscode` user, with passwordless sudo explicitly removed in the Dockerfile
 - `cap_drop: ALL`, `no-new-privileges`, `pids_limit: 256` in docker-compose.yml
+- Resource caps: `cpus`/`mem_limit` (overridable via `SANDBOX_CPUS`/`SANDBOX_MEM_LIMIT` in `.env`), tmpfs-bounded `/tmp`
+- Network egress: sandbox sits on an `internal: true` network with no route out; its only path is the `proxy` service (Squid) enforcing the domain allowlist in `proxy/allowlist.txt`. The proxy env vars in compose are convenience — the internal network is the actual enforcement, so never attach `sandbox` to `egress_net`. To allow a new domain: edit `proxy/allowlist.txt`, then `docker compose restart proxy`.
 - Optional gVisor (`runsc`) runtime for syscall-level isolation
 - Never mount `/var/run/docker.sock` into the container
+
+Known residual limits (documented, not bugs to "fix" silently): Docker's embedded DNS may still forward external lookups on internal networks (low-bandwidth exfil channel), allowlisted domains that host user content (github.com) remain possible exfil targets, and disk on the `/workspace` bind mount is uncapped.
 
 ## Non-obvious constraints
 

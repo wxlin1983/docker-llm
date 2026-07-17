@@ -7,29 +7,41 @@ A hardened, disposable Docker sandbox for Python/React development with the
 
 ```
  Host machine
- ┌─────────────────────────────────────────────────────────────┐
- │  Docker Engine  (optionally using the gVisor / runsc runtime)│
- │  ┌──────────────────────────────────────────────────────┐    │
- │  │  sandbox container (non-root "vscode" user)          │    │
- │  │   - Claude Code CLI                                  │    │
- │  │   - uv (Python), pnpm (Node/React)                   │    │
- │  │   - git, configured with PAT-based auth at runtime   │    │
- │  │   - cap_drop: ALL, no-new-privileges, pids_limit      │    │
- │  └──────────────────────────────────────────────────────┘    │
- │        │                              │                       │
- │   bind mount                    named volume                  │
- │   ./workspace  <-->  /workspace  ~/.claude  <--> claude-config │
- │   (your source code)             (Claude login/session state) │
- └─────────────────────────────────────────────────────────────┘
+ ┌────────────────────────────────────────────────────────────────────┐
+ │  Docker Engine  (optionally using the gVisor / runsc runtime)       │
+ │                                                                     │
+ │   sandbox_net (internal: no route out)      egress_net              │
+ │  ┌──────────────────────────────────┐  ┌───────────────────┐        │
+ │  │  sandbox container               │  │  proxy container  │        │
+ │  │  (non-root "vscode" user)        │──│  (Squid, domain   │──▶ internet
+ │  │   - Claude Code CLI              │  │   allowlist only) │  (allowlisted
+ │  │   - uv (Python), pnpm (React)    │  └───────────────────┘   domains only)
+ │  │   - git, PAT auth at runtime     │                                │
+ │  │   - cap_drop ALL, no-new-privs,  │                                │
+ │  │     pids/cpu/mem/tmpfs limits    │                                │
+ │  └──────────────────────────────────┘                                │
+ │        │                              │                              │
+ │   bind mount                    named volume                         │
+ │   ./workspace  <-->  /workspace  ~/.claude  <--> claude-config       │
+ │   (your source code)             (Claude login/session state)        │
+ └────────────────────────────────────────────────────────────────────┘
 ```
 
 **Why it's built this way:**
 
 - **Claude Code can run arbitrary shell commands.** Everything else in this design
   exists to bound the damage if something goes wrong: a non-root user, dropped Linux
-  capabilities, `no-new-privileges`, a process-count limit, and (optionally) the
+  capabilities, `no-new-privileges`, process/CPU/memory limits, and (optionally) the
   [gVisor](https://gvisor.dev/) (`runsc`) container runtime for syscall-level isolation
   on top of normal Docker isolation.
+- **Network egress is deny-by-default.** The sandbox sits on an `internal: true`
+  Docker network with no gateway — even a hostile process that ignores the proxy
+  environment variables has no route anywhere. The only path out is the Squid proxy
+  sidecar, which permits exactly the domains in [proxy/allowlist.txt](proxy/allowlist.txt)
+  (Anthropic/Claude, GitHub, npm, PyPI) on ports 80/443, refuses connections to
+  private/link-local/metadata IP ranges, and logs every attempt
+  (`docker compose exec proxy tail -f /var/log/squid/access.log`). To allow another
+  domain, add it there and `docker compose restart proxy`.
 - **Source code lives on the host**, bind-mounted into `/workspace`. The container
   itself is disposable/rebuildable; your code is not.
 - **Claude's own login state is a separate named volume** (`claude-config`), not part
@@ -101,6 +113,8 @@ this sandbox.
 ```
 docker/          everything that goes into the image: Dockerfile, entrypoint.sh,
                  AGENT.md (in-container rules). Also the Docker build context.
+proxy/           egress proxy config: squid.conf + allowlist.txt (host side,
+                 mounted read-only into the proxy container)
 scripts/         host-side helpers (gVisor install) — never enter the image
 .devcontainer/   VSCode Dev Containers attach config
 workspace/       your source code (gitignored), bind-mounted at /workspace
@@ -114,6 +128,15 @@ docker-compose.yml, .env(.example)   runtime wiring and secrets, host side only
   keep the build context pointed at `docker/` so secrets stay structurally out of reach.
 - Never mount `/var/run/docker.sock` into this container; doing so would defeat all of
   the isolation above.
-- All tool versions (Node, pnpm, uv, Claude Code CLI, base image) are pinned in the
-  `Dockerfile` rather than floating on `latest`, for reproducibility and auditability.
+- All tool versions (Node, pnpm, uv, Claude Code CLI, base image, Squid image) are
+  pinned rather than floating on `latest`, for reproducibility and auditability.
   Bump them deliberately.
+- Never attach the `sandbox` service to `egress_net` (or any non-internal network);
+  the internal-only network is what makes the egress allowlist enforceable rather
+  than advisory.
+- Known residual limits of the egress design: Docker's embedded DNS may still forward
+  external lookups on internal networks (a low-bandwidth DNS exfiltration channel,
+  depending on Docker version), and allowlisted domains that host arbitrary user
+  content (e.g. github.com) can themselves serve as exfiltration targets. Keep the
+  allowlist minimal and PAT scopes narrow. Disk usage on the `/workspace` bind mount
+  is not capped (host filesystem quotas would be needed); `/tmp` is capped via tmpfs.
