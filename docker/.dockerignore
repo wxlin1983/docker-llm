@@ -1,0 +1,5 @@
+# The build context is already limited to docker/ (see docker-compose.yml), so
+# host secrets/source can't reach the image. This exclusion is defense in depth
+# in case an env file is ever dropped into this directory.
+.env
+.env.*

@@ -60,7 +60,7 @@ COPY --chown=vscode:vscode AGENT.md /opt/sandbox/AGENT.md
 
 WORKDIR /workspace
 
-COPY --chmod=755 scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY --chmod=755 entrypoint.sh /usr/local/bin/entrypoint.sh
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["sleep", "infinity"]

@@ -36,8 +36,9 @@ A hardened, disposable Docker sandbox for Python/React development with the
   of the workspace mount. A Claude Pro OAuth login survives container rebuilds without
   mixing Claude's session state into your project's files.
 - **GitHub auth uses a PAT**, injected only at container *runtime* via `docker-compose`
-  `env_file`. It is never baked into the image (`.dockerignore`/`.gitignore` explicitly
-  exclude `.env*`), so it can't leak into an image layer or get committed.
+  `env_file`. It is never baked into the image: the build context is limited to the
+  `docker/` directory, so `.env` (and everything else outside `docker/`) can't leak
+  into an image layer, and `.gitignore` keeps it from being committed.
 
 ## Setup
 
@@ -92,12 +93,25 @@ A hardened, disposable Docker sandbox for Python/React development with the
   volume rm docker-llm_claude-config`, then `docker compose up -d --build` to let it
   re-initialize with correct ownership).
 
-See [AGENT.md](AGENT.md) for the rules Claude Code itself follows inside this sandbox.
+See [docker/AGENT.md](docker/AGENT.md) for the rules Claude Code itself follows inside
+this sandbox.
+
+## Repository layout
+
+```
+docker/          everything that goes into the image: Dockerfile, entrypoint.sh,
+                 AGENT.md (in-container rules). Also the Docker build context.
+scripts/         host-side helpers (gVisor install) — never enter the image
+.devcontainer/   VSCode Dev Containers attach config
+workspace/       your source code (gitignored), bind-mounted at /workspace
+docker-compose.yml, .env(.example)   runtime wiring and secrets, host side only
+```
 
 ## Security notes
 
 - The PAT only ever enters the container via `env_file` at container start — never via
-  `COPY`/`ARG`/`ENV` in the `Dockerfile`. Keep it that way if you modify the build.
+  `COPY`/`ARG`/`ENV` in the `Dockerfile`. Keep it that way if you modify the build, and
+  keep the build context pointed at `docker/` so secrets stay structurally out of reach.
 - Never mount `/var/run/docker.sock` into this container; doing so would defeat all of
   the isolation above.
 - All tool versions (Node, pnpm, uv, Claude Code CLI, base image) are pinned in the

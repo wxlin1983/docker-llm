@@ -1,7 +1,9 @@
 services:
   sandbox:
+    # Build context is limited to docker/ so nothing outside it (.env, workspace/,
+    # .git) can ever reach the image, regardless of .dockerignore.
     build:
-      context: .
+      context: ./docker
       dockerfile: Dockerfile
     image: docker-llm-sandbox:local
     # gVisor: install with scripts/setup-gvisor.sh on the host, then uncomment below.
