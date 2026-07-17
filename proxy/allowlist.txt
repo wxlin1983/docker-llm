@@ -10,8 +10,12 @@
 .claude.ai
 .claude.com
 
-# GitHub: git push/pull (PAT auth), raw files, release assets
-.github.com
+# GitHub: exact hosts only — deliberately NOT .github.com, which would include
+# gist.github.com, a write-capable exfiltration target for a stolen PAT.
+github.com
+api.github.com
+codeload.github.com
+# Read-only CDN (raw files, release assets); broad match is fine — no write API.
 .githubusercontent.com
 
 # Node/pnpm registry

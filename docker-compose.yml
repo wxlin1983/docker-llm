@@ -32,6 +32,11 @@ services:
     tty: true
     env_file:
       - .env
+    # The PAT is a file secret, NOT an env var: env vars leak into every
+    # process's environment, crash dumps, and `ps e` output. The entrypoint
+    # reads /run/secrets/github_pat once at startup.
+    secrets:
+      - github_pat
     # All egress goes through the allowlisting proxy. This is enforced by the
     # internal-only network below (no route out), not just by these variables.
     environment:
@@ -80,3 +85,9 @@ networks:
 
 volumes:
   claude-config:
+
+secrets:
+  github_pat:
+    # Create with: mkdir -p .secrets && touch .secrets/github_pat && chmod 600 .secrets/github_pat
+    # (empty file = no GitHub auth configured). .secrets/ is gitignored.
+    file: .secrets/github_pat

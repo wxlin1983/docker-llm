@@ -48,18 +48,26 @@ A hardened, disposable Docker sandbox for Python/React development with the
 - **Claude's own login state is a separate named volume** (`claude-config`), not part
   of the workspace mount. A Claude Pro OAuth login survives container rebuilds without
   mixing Claude's session state into your project's files.
-- **GitHub auth uses a PAT**, injected only at container *runtime* via `docker-compose`
-  `env_file`. It is never baked into the image: the build context is limited to the
-  `docker/` directory, so `.env` (and everything else outside `docker/`) can't leak
-  into an image layer, and `.gitignore` keeps it from being committed.
+- **GitHub auth uses a PAT delivered as a Docker file secret** (`.secrets/github_pat`
+  → `/run/secrets/github_pat`), read once by the entrypoint at container start. It is
+  never an environment variable (env vars leak into every process, crash dumps, and
+  `ps e` output) and never baked into the image: the build context is limited to the
+  `docker/` directory, and `.gitignore` excludes `.secrets/`. Residual risk, accepted:
+  code running inside the sandbox can still read the secret file and
+  `~/.git-credentials` — which is why the PAT must be narrowly scoped and short-lived,
+  and why `gist.github.com` is excluded from the egress allowlist.
 
 ## Setup
 
-1. Copy the env template and fill in your GitHub PAT:
+1. Copy the env template and set up the PAT secret file:
    ```sh
    cp .env.example .env
-   # edit .env: set GITHUB_PAT, GITHUB_USER, and SOURCE_DIR if not using ./workspace
+   # edit .env: set GITHUB_USER, and SOURCE_DIR if not using ./workspace
+   mkdir -p .secrets && chmod 700 .secrets
+   printf '%s' 'github_pat_XXXX' > .secrets/github_pat && chmod 600 .secrets/github_pat
    ```
+   The PAT goes in `.secrets/github_pat` (leave it empty for no GitHub auth), **not**
+   in `.env` — as a Docker file secret it never appears in any process's environment.
    Use a [fine-grained PAT](https://github.com/settings/tokens?type=beta) scoped to only
    the repo(s) you need, with an expiration date.
 
@@ -126,9 +134,10 @@ docker-compose.yml, .env(.example)   runtime wiring and secrets, host side only
 
 ## Security notes
 
-- The PAT only ever enters the container via `env_file` at container start — never via
-  `COPY`/`ARG`/`ENV` in the `Dockerfile`. Keep it that way if you modify the build, and
-  keep the build context pointed at `docker/` so secrets stay structurally out of reach.
+- The PAT only ever enters the container as a file secret at container start — never
+  via `COPY`/`ARG`/`ENV` in the `Dockerfile` and never as an environment variable. Keep
+  it that way if you modify the build, and keep the build context pointed at `docker/`
+  so secrets stay structurally out of reach.
 - Never mount `/var/run/docker.sock` into this container; doing so would defeat all of
   the isolation above.
 - All tool versions (Node, pnpm, uv, Claude Code CLI, base image, Squid image) are

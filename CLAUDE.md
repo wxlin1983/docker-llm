@@ -29,7 +29,7 @@ Three kinds of state, deliberately separated — the container itself is disposa
 
 - **Source code**: host `./workspace` (or `SOURCE_DIR`) bind-mounted at `/workspace`. `workspace/` is user project data, not part of this repo (gitignored); don't treat its contents (e.g. `.pnpm-store`) as code to maintain.
 - **Claude login state**: named volume `claude-config` mounted at `/home/vscode/.claude`, survives rebuilds.
-- **Secrets**: `GITHUB_PAT` lives only in host `.env`, injected at container start via compose `env_file`. It must never enter the image via `COPY`/`ARG`/`ENV` — the build context is limited to `docker/`, so `.env` is structurally outside it, and `.gitignore` keeps it uncommitted.
+- **Secrets**: the GitHub PAT lives only in host `.secrets/github_pat` (gitignored), delivered as a Docker file secret to `/run/secrets/github_pat` and read once by the entrypoint. Never move it into env vars, `.env`, or the image — the build context is limited to `docker/`, so both `.env` and `.secrets/` are structurally outside it. `gist.github.com` is deliberately excluded from the egress allowlist because it's a write-capable exfil target for a stolen PAT.
 
 Startup flow: `docker/entrypoint.sh` runs on every container start. It copies `/opt/sandbox/AGENT.md` to `~/.claude/CLAUDE.md` only if absent (user edits persist), and writes the PAT into `~/.git-credentials` via git's `store` credential helper.
 

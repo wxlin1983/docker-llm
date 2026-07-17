@@ -30,12 +30,13 @@ rules of this environment so you don't fight its design.
 ## Git / GitHub
 
 - Git authentication to GitHub is already configured via a credential helper backed by
-  a PAT injected at container start (the image's entrypoint script). You do not need to set up
-  SSH keys, run `gh auth login`, or prompt the user for credentials — `git clone`,
-  `git push`, `git pull` against `https://github.com/...` URLs just work.
-- Never write a GitHub token into a committed file, Dockerfile `ENV`/`ARG`, or any file
-  under `/workspace` that might get committed. The PAT lives only in the host's `.env`
-  file and is injected at runtime — keep it that way.
+  a PAT delivered as a runtime file secret. You do not need to set up SSH keys, run
+  `gh auth login`, or prompt the user for credentials — `git clone`, `git push`,
+  `git pull` against `https://github.com/...` URLs just work.
+- Never write a GitHub token into a committed file, Dockerfile `ENV`/`ARG`, an
+  environment variable, or any file under `/workspace`. Never copy or print the
+  contents of `/run/secrets/*` or `~/.git-credentials` — use git commands, which read
+  the credentials themselves.
 
 ## Network
 

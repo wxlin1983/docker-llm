@@ -20,12 +20,12 @@ if [[ ! -f "${HOME}/.claude/CLAUDE.md" ]]; then
     cp /opt/sandbox/AGENT.md "${HOME}/.claude/CLAUDE.md"
 fi
 
-# Configure git authentication from the GITHUB_PAT/GITHUB_USER env vars supplied
-# via docker-compose's env_file at container start. The PAT never appears in the
-# image -- only here, at runtime.
-if [[ -n "${GITHUB_PAT:-}" ]]; then
+# Configure git authentication from the Docker file secret (never an env var:
+# env vars would be visible to every process in the container). An empty or
+# missing secret file simply means no GitHub auth is configured.
+if [[ -s /run/secrets/github_pat ]]; then
     git config --global credential.helper store
-    echo "https://${GITHUB_USER:-x-access-token}:${GITHUB_PAT}@github.com" > "${HOME}/.git-credentials"
+    echo "https://${GITHUB_USER:-x-access-token}:$(< /run/secrets/github_pat)@github.com" > "${HOME}/.git-credentials"
     chmod 600 "${HOME}/.git-credentials"
 fi
 
