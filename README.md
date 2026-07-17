@@ -71,13 +71,11 @@ A hardened, disposable Docker sandbox for Python/React development with the
    Use a [fine-grained PAT](https://github.com/settings/tokens?type=beta) scoped to only
    the repo(s) you need, with an expiration date.
 
-2. Install gVisor on the **host** — the compose file uses the `runsc` runtime by
-   default:
+2. Install gVisor on the **host** — the sandbox requires the `runsc` runtime and
+   will not start without it:
    ```sh
    ./scripts/setup-gvisor.sh
    ```
-   If you can't use gVisor, set `SANDBOX_RUNTIME=runc` in `.env` to fall back to the
-   standard runtime (weaker isolation).
 
 3. Build and start the sandbox:
    ```sh

@@ -6,9 +6,9 @@ services:
       context: ./docker
       dockerfile: Dockerfile
     image: docker-llm-sandbox:local
-    # gVisor syscall-level isolation, on by default. Run scripts/setup-gvisor.sh
-    # on the host once first; set SANDBOX_RUNTIME=runc in .env to opt out.
-    runtime: ${SANDBOX_RUNTIME:-runsc}
+    # gVisor syscall-level isolation, mandatory — the sandbox must not run on
+    # plain runc. Run scripts/setup-gvisor.sh on the host once to install it.
+    runtime: runsc
     cap_drop:
       - ALL
     security_opt:
@@ -39,13 +39,20 @@ services:
       - github_pat
     # All egress goes through the allowlisting proxy. This is enforced by the
     # internal-only network below (no route out), not just by these variables.
+    # The proxy is addressed by static IP, not service name: gVisor's netstack
+    # can't reach Docker's embedded DNS (127.0.0.11), so name resolution doesn't
+    # exist inside the sandbox at all — which also closes DNS as a side channel.
     environment:
-      HTTP_PROXY: http://proxy:3128
-      HTTPS_PROXY: http://proxy:3128
-      http_proxy: http://proxy:3128
-      https_proxy: http://proxy:3128
+      HTTP_PROXY: http://172.30.0.10:3128
+      HTTPS_PROXY: http://172.30.0.10:3128
+      http_proxy: http://172.30.0.10:3128
+      https_proxy: http://172.30.0.10:3128
       NO_PROXY: localhost,127.0.0.1
       no_proxy: localhost,127.0.0.1
+    # Under gVisor, hitting mem_limit OOM-kills the whole sandbox (the Sentry
+    # holds all app memory), not just the offending process — auto-restart so
+    # a runaway allocation doesn't leave the sandbox down.
+    restart: unless-stopped
     networks:
       - sandbox_net
     volumes:
@@ -71,8 +78,10 @@ services:
       - ./proxy/squid.conf:/etc/squid/squid.conf:ro
       - ./proxy/allowlist.txt:/etc/squid/allowlist.txt:ro
     networks:
-      - sandbox_net
-      - egress_net
+      sandbox_net:
+        # Static IP so the sandbox can reach the proxy without any DNS.
+        ipv4_address: 172.30.0.10
+      egress_net:
     restart: unless-stopped
 
 networks:
@@ -81,6 +90,9 @@ networks:
   # egress_net or add other bridges here.
   sandbox_net:
     internal: true
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
   egress_net:
 
 volumes:
