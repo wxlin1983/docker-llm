@@ -6,12 +6,18 @@ services:
       context: ./docker
       dockerfile: Dockerfile
     image: docker-llm-sandbox:local
-    # gVisor: install with scripts/setup-gvisor.sh on the host, then uncomment below.
-    # runtime: runsc
+    # gVisor syscall-level isolation, on by default. Run scripts/setup-gvisor.sh
+    # on the host once first; set SANDBOX_RUNTIME=runc in .env to opt out.
+    runtime: ${SANDBOX_RUNTIME:-runsc}
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
+    # Rootfs is immutable; the only writable paths are the tmpfs mounts below,
+    # the /workspace bind mount, and the ~/.claude volume. HOME is a size-capped
+    # tmpfs wiped on every restart (the entrypoint restores dotfiles; Claude
+    # login state lives in the ~/.claude volume and survives).
+    read_only: true
     pids_limit: 256
     # Resource caps so a runaway/hostile process can't take down the host.
     # Override in .env; disk on the /workspace bind mount is NOT capped (needs
@@ -21,6 +27,7 @@ services:
     memswap_limit: ${SANDBOX_MEM_LIMIT:-6g}
     tmpfs:
       - /tmp:size=1g,mode=1777
+      - /home/vscode:size=2g,uid=1000,gid=1000,mode=0755
     stdin_open: true
     tty: true
     env_file:

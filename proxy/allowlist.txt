@@ -3,9 +3,12 @@
 # potential exfiltration target as well as a download source.
 # After editing, apply with: docker compose restart proxy
 
-# Claude Code: API, telemetry (statsig.anthropic.com), OAuth/setup-token flow
+# Claude Code: API, telemetry (statsig.anthropic.com), OAuth/setup-token flow.
+# platform.claude.com handles OAuth token refresh — without .claude.com, logins
+# silently expire and can't renew (observed as API 401s).
 .anthropic.com
 .claude.ai
+.claude.com
 
 # GitHub: git push/pull (PAT auth), raw files, release assets
 .github.com
@@ -17,3 +20,11 @@ registry.npmjs.org
 # Python/uv: package index + wheel downloads
 pypi.org
 files.pythonhosted.org
+
+# VSCode Dev Containers: vscode-server download into the container + the
+# extensions listed in .devcontainer/devcontainer.json. Deliberately NOT the
+# broad *.msecnd.net / *.azureedge.net CDNs.
+update.code.visualstudio.com
+vscode.download.prss.microsoft.com
+marketplace.visualstudio.com
+.gallerycdn.vsassets.io

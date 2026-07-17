@@ -36,9 +36,10 @@ Startup flow: `docker/entrypoint.sh` runs on every container start. It copies `/
 Security layers (don't loosen one to "fix" a problem another layer causes):
 - Non-root `vscode` user, with passwordless sudo explicitly removed in the Dockerfile
 - `cap_drop: ALL`, `no-new-privileges`, `pids_limit: 256` in docker-compose.yml
+- Read-only rootfs; only writable paths are `/workspace` (bind), `~/.claude` (volume), and tmpfs `/tmp` + `/home/vscode`. HOME is wiped every restart; `~/.local/bin` is last on PATH so sandbox code can't shadow system binaries
+- gVisor (`runsc`) is the default runtime (`SANDBOX_RUNTIME=runc` in `.env` to opt out); host must run `scripts/setup-gvisor.sh` once
 - Resource caps: `cpus`/`mem_limit` (overridable via `SANDBOX_CPUS`/`SANDBOX_MEM_LIMIT` in `.env`), tmpfs-bounded `/tmp`
 - Network egress: sandbox sits on an `internal: true` network with no route out; its only path is the `proxy` service (Squid) enforcing the domain allowlist in `proxy/allowlist.txt`. The proxy env vars in compose are convenience — the internal network is the actual enforcement, so never attach `sandbox` to `egress_net`. To allow a new domain: edit `proxy/allowlist.txt`, then `docker compose restart proxy`.
-- Optional gVisor (`runsc`) runtime for syscall-level isolation
 - Never mount `/var/run/docker.sock` into the container
 
 Known residual limits (documented, not bugs to "fix" silently): Docker's embedded DNS may still forward external lookups on internal networks (low-bandwidth exfil channel), allowlisted domains that host user content (github.com) remain possible exfil targets, and disk on the `/workspace` bind mount is uncapped.
@@ -48,4 +49,5 @@ Known residual limits (documented, not bugs to "fix" silently): Docker's embedde
 - The Dockerfile pre-creates `~/.claude` owned by `vscode` **before** it becomes a volume mount point. Docker initializes a brand-new named volume's ownership from what exists at that path in the image; removing this line silently breaks `claude login` (volume becomes `root:root`). Similarly, `AGENT.md` is copied to `/opt/sandbox/`, not into `~/.claude`, because files baked into a volume mount path only reach a *brand-new* volume.
 - All tool versions (base image, Node major, pnpm, uv, Claude Code CLI) are pinned as Dockerfile `ARG`s. Bump them deliberately; never switch to `latest`.
 - Inside the sandbox, package management is standardized: `uv` for Python, `pnpm` for Node (see `docker/AGENT.md`). Keep the Dockerfile and AGENT.md consistent if tooling changes.
+- `/home/vscode` at runtime is tmpfs: the image's home dir is snapshotted to `/opt/sandbox/home-skel` (Dockerfile, before `USER vscode`) and restored by the entrypoint each start. Anything a build step installs into HOME after that snapshot silently vanishes at runtime — install tools root-owned into `/usr/local/bin` instead (this is why uv uses `UV_UNMANAGED_INSTALL`).
 - `.devcontainer/devcontainer.json` attaches VSCode to the same compose service (`sandbox`); it references `../docker-compose.yml`, so compose changes affect both entry paths.

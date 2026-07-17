@@ -9,9 +9,13 @@ rules of this environment so you don't fight its design.
   don't try to use it, and don't suggest installing it.
 - `/workspace` is a bind mount from the host. Files you create/edit there persist on
   the host filesystem and survive container restarts/rebuilds.
-- Everything outside `/workspace` and `~/.claude` is ephemeral. Don't write state you
-  expect to survive a rebuild anywhere else (e.g. `/tmp`, `/home/vscode` outside
-  `.claude`).
+- The root filesystem is **read-only**. The only writable locations are `/workspace`,
+  `~/.claude`, and the tmpfs mounts at `/tmp` and `$HOME`. Attempts to write anywhere
+  else (e.g. `npm install -g`, `/usr/local/...`) will fail by design — don't fight it.
+- Everything outside `/workspace` and `~/.claude` is ephemeral; `$HOME` is a tmpfs
+  that is wiped on every container restart (dotfiles are restored automatically).
+  Don't write state you expect to survive a restart anywhere but `/workspace` or
+  `~/.claude`.
 - `~/.claude` is a named Docker volume, not part of `/workspace`. It holds your own
   login/session state and survives rebuilds, but it is not source code and should
   never be treated as a place to stash project files.

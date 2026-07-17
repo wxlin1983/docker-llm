@@ -8,7 +8,7 @@ A hardened, disposable Docker sandbox for Python/React development with the
 ```
  Host machine
  ┌────────────────────────────────────────────────────────────────────┐
- │  Docker Engine  (optionally using the gVisor / runsc runtime)       │
+ │  Docker Engine  (gVisor / runsc runtime by default)                 │
  │                                                                     │
  │   sandbox_net (internal: no route out)      egress_net              │
  │  ┌──────────────────────────────────┐  ┌───────────────────┐        │
@@ -17,8 +17,8 @@ A hardened, disposable Docker sandbox for Python/React development with the
  │  │   - Claude Code CLI              │  │   allowlist only) │  (allowlisted
  │  │   - uv (Python), pnpm (React)    │  └───────────────────┘   domains only)
  │  │   - git, PAT auth at runtime     │                                │
- │  │   - cap_drop ALL, no-new-privs,  │                                │
- │  │     pids/cpu/mem/tmpfs limits    │                                │
+ │  │   - read-only rootfs, cap_drop   │                                │
+ │  │     ALL, pids/cpu/mem limits     │                                │
  │  └──────────────────────────────────┘                                │
  │        │                              │                              │
  │   bind mount                    named volume                         │
@@ -31,9 +31,10 @@ A hardened, disposable Docker sandbox for Python/React development with the
 
 - **Claude Code can run arbitrary shell commands.** Everything else in this design
   exists to bound the damage if something goes wrong: a non-root user, dropped Linux
-  capabilities, `no-new-privileges`, process/CPU/memory limits, and (optionally) the
-  [gVisor](https://gvisor.dev/) (`runsc`) container runtime for syscall-level isolation
-  on top of normal Docker isolation.
+  capabilities, `no-new-privileges`, a read-only rootfs with an ephemeral tmpfs HOME,
+  process/CPU/memory limits, and (by default) the [gVisor](https://gvisor.dev/)
+  (`runsc`) container runtime for syscall-level isolation on top of normal Docker
+  isolation.
 - **Network egress is deny-by-default.** The sandbox sits on an `internal: true`
   Docker network with no gateway — even a hostile process that ignores the proxy
   environment variables has no route anywhere. The only path out is the Squid proxy
@@ -62,11 +63,13 @@ A hardened, disposable Docker sandbox for Python/React development with the
    Use a [fine-grained PAT](https://github.com/settings/tokens?type=beta) scoped to only
    the repo(s) you need, with an expiration date.
 
-2. (Optional, recommended) Install gVisor on the **host**:
+2. Install gVisor on the **host** — the compose file uses the `runsc` runtime by
+   default:
    ```sh
    ./scripts/setup-gvisor.sh
    ```
-   Then uncomment `runtime: runsc` in `docker-compose.yml`.
+   If you can't use gVisor, set `SANDBOX_RUNTIME=runc` in `.env` to fall back to the
+   standard runtime (weaker isolation).
 
 3. Build and start the sandbox:
    ```sh
@@ -131,6 +134,13 @@ docker-compose.yml, .env(.example)   runtime wiring and secrets, host side only
 - All tool versions (Node, pnpm, uv, Claude Code CLI, base image, Squid image) are
   pinned rather than floating on `latest`, for reproducibility and auditability.
   Bump them deliberately.
+- The rootfs is immutable (`read_only: true`) and `~/.local/bin` comes *last* on
+  `PATH`, so code running in the sandbox can't replace or shadow system binaries.
+  `/home/vscode` is a size-capped tmpfs wiped on every restart — the entrypoint
+  restores the image's dotfiles, Claude's login state lives in the `claude-config`
+  volume (`~/.claude.json` is symlinked into it), and vscode-server just re-downloads
+  after a container recreate. Anything that must persist belongs in `/workspace`, the
+  `Dockerfile`, or `~/.claude`.
 - Never attach the `sandbox` service to `egress_net` (or any non-internal network);
   the internal-only network is what makes the egress allowlist enforceable rather
   than advisory.
